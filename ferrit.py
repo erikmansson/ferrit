@@ -5,14 +5,18 @@ import requests
 import git
 import urllib3
 from urllib.parse import urlparse
-from pkg_resources import get_distribution, DistributionNotFound
+from pkg_resources import (
+    get_distribution,
+    DistributionNotFound,
+    RequirementParseError,
+)
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 try:
     __version__ = get_distribution(__name__).version
-except DistributionNotFound:
+except (DistributionNotFound, RequirementParseError):
     __version__ = None
 
 
