@@ -1,5 +1,7 @@
 # Ferrit
 
+![PyPI](https://img.shields.io/pypi/v/ferrit)
+
 A stupid tool for listing and checking out Gerrit changes
 
 ## Getting started
