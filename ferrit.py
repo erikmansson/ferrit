@@ -46,7 +46,11 @@ class Ferrit:
 
         self.repo_name = o.path[len("/a/"):]
 
-        gerrit_user, gerrit_addr = o.netloc.split("@")
+        try:
+            gerrit_user, gerrit_addr = o.netloc.split("@")
+        except ValueError:
+            gerrit_user = None
+            gerrit_addr = o.netloc
 
         with open(os.path.expanduser("~/.git-credentials"), "r") as f:
             credentialss = [line.strip() for line in f.readlines()]
@@ -55,8 +59,11 @@ class Ferrit:
             o = urlparse(credentials)
             c_userpass, c_addr = o.netloc.split("@")
             c_user = c_userpass.split(":")[0]
-            if c_user == gerrit_user and c_addr == gerrit_addr:
-                break
+            if c_addr == gerrit_addr:
+                if gerrit_user is not None and c_user != gerrit_user:
+                    continue
+                else:
+                    break
         else:
             self.crash("No credentials found")
 
