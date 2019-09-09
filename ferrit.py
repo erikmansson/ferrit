@@ -134,7 +134,7 @@ class Ferrit:
         fetch_info = patch_set["fetch"]["http"]
 
         if urlparse(fetch_info["url"]).path != urlparse(self.remote.url).path:
-            self.crash("Fetch url mismatch")
+            self.crash("Fetch url mismatch (wrong repo?)")
 
         if self.repo.is_dirty():
             a = self.yn_question("Repo is dirty, continue?")
