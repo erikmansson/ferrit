@@ -4,6 +4,9 @@ import setuptools
 with open("README.md", "r") as f:
     long_description = f.read()
 
+with open("requirements.txt", "r") as f:
+    requirements = [line.strip() for line in f.readlines()]
+
 setuptools.setup(
     name="ferrit",
     author="Erik Månsson",
@@ -28,5 +31,5 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.5",
-    install_requires=["gitpython"],
+    install_requires=requirements,
 )
