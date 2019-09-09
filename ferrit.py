@@ -4,7 +4,7 @@ import json
 import requests
 import git
 import urllib3
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from pkg_resources import (
     get_distribution,
     DistributionNotFound,
@@ -67,8 +67,7 @@ class Ferrit:
         else:
             self.crash("No credentials found")
 
-        self.api_base_url = credentials
-        self.api_base_url += "/a/"
+        self.api_base_url = urljoin(credentials, "/a/")
 
         repo_dir = self.repo.common_dir
         os.chdir(repo_dir)
@@ -232,10 +231,7 @@ class Ferrit:
             self.print_change(change)
 
     def api_get(self, path):
-        if path.startswith("/"):
-            path = path[1:]
-
-        url = self.api_base_url + path
+        url = urljoin(self.api_base_url, path)
         r = requests.get(url, verify=self.SSL_VERIFY)
 
         if r.status_code == 200:
