@@ -133,7 +133,7 @@ class Ferrit:
     def fetch_and_checkout(self, patch_set):
         fetch_info = patch_set["fetch"]["http"]
 
-        if fetch_info["url"] != self.remote.url:
+        if urlparse(fetch_info["url"]).path != urlparse(self.remote.url).path:
             self.crash("Fetch url mismatch")
 
         if self.repo.is_dirty():
