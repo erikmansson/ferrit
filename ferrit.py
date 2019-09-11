@@ -70,7 +70,7 @@ class Ferrit:
 
         self.api_base_url = urljoin(credentials, "/a/")
 
-        repo_dir = self.repo.common_dir
+        repo_dir = os.path.join(self.repo.common_dir, "..")
         os.chdir(repo_dir)
 
     def run(self):
