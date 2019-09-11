@@ -215,14 +215,14 @@ class Ferrit:
             shown_subject = shown_subject[:50] + " ..."
 
         s = "{n:5} {k:3}  {p} {w} {m}  {o:<3} {s}".format(
-                n=num,
-                k=patch_sets,
-                w=("W" if wip else " "),
-                p=("P" if private else " "),
-                m=merge_symbol,
-                o=owner_name,
-                s=shown_subject,
-                )
+            n=num,
+            k=patch_sets,
+            w=("W" if wip else " "),
+            p=("P" if private else " "),
+            m=merge_symbol,
+            o=owner_name,
+            s=shown_subject,
+        )
 
         print(s)
 
