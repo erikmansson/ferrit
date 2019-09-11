@@ -260,7 +260,8 @@ class Ferrit:
     def api_get_change(self, change_num):
         path = "changes/{}/?o=ALL_REVISIONS".format(change_num)
         change = self.api_get(path)
-        self.add_info_to_change(change)
+        if change:
+            self.add_info_to_change(change)
         return change
 
     def api_get_changes(self, qs):
