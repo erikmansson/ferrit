@@ -107,8 +107,7 @@ class Ferrit:
             self.run_list_changes()
 
     def run_checkout_patch_set(self, change_num, patch_set_num=None):
-        path = "changes/{}/?o=ALL_REVISIONS".format(change_num)
-        change = self.api_get(path)
+        change = self.api_get_change(change_num)
 
         if change is None:
             self.crash("Change not found")
@@ -243,6 +242,10 @@ class Ferrit:
 
         assert r.text.startswith(self.RES_START)
         return json.loads(r.text[len(self.RES_START):])
+
+    def api_get_change(self, change_num):
+        path = "changes/{}/?o=ALL_REVISIONS".format(change_num)
+        return self.api_get(path)
 
     def api_get_changes(self, qs):
         qs.append("repo:" + self.repo_name)
