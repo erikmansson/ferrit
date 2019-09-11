@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import argparse
 import requests
 import git
 import urllib3
@@ -73,41 +74,40 @@ class Ferrit:
         os.chdir(repo_dir)
 
     def run(self):
-        args = sys.argv[1:]
-
-        if args:
-            if args[0] == "--version":
-                print("Ferrit v" + __version__)
-                self.quit()
-
         self.setup()
 
-        if args:
-            try:
-                change_num = int(args[0])
-            except ValueError:
-                pass
-            else:
-                if len(args) == 1:
-                    self.run_checkout_patch_set(change_num)
-                elif len(args) == 2:
-                    try:
-                        patch_set_num = int(args[1])
-                    except ValueError:
-                        self.crash("Invalid arguments")
-                    else:
-                        self.run_checkout_patch_set(change_num, patch_set_num)
-                else:
-                    self.crash("Invalid arguments")
+        parser = argparse.ArgumentParser()
+        parser.add_argument(
+            "--version",
+            action="version",
+            version="%(prog)s v{}".format(__version__ or "?"),
+        )
 
-                self.quit()
+        subparsers = parser.add_subparsers(dest="command")
+        subparsers.required = True  # not in call due to bug in argparse
 
-            self.run_search(args)
-        else:
-            self.run_list_changes()
+        checkout_parser = subparsers.add_parser("checkout", aliases=["ch"])
+        checkout_parser.add_argument("change", type=int)
+        checkout_parser.add_argument("patch_set", type=int, default=None, nargs="?")
+        checkout_parser.set_defaults(func=self.run_checkout)
 
-    def run_checkout_patch_set(self, change_num, patch_set_num=None):
-        change, patch_set = self.get_change_and_patch_set(change_num, patch_set_num)
+        revparse_parser = subparsers.add_parser("rev-parse", aliases=["sha", "id"])
+        revparse_parser.add_argument("change", type=int)
+        revparse_parser.add_argument("patch_set", type=int, default=None, nargs="?")
+        revparse_parser.set_defaults(func=self.run_revparse)
+
+        list_parser = subparsers.add_parser("dashboard", aliases=["da", "li"])
+        list_parser.set_defaults(func=self.run_dashboard)
+
+        search_parser = subparsers.add_parser("search", aliases=["se"])
+        search_parser.add_argument("query", nargs="+")
+        search_parser.set_defaults(func=self.run_search)
+
+        args = parser.parse_args()
+        args.func(args)
+
+    def run_checkout(self, args):
+        change, patch_set = self.get_change_and_patch_set(args.change, args.patch_set)
 
         print()
         self.print_change(change)
@@ -147,8 +147,15 @@ class Ferrit:
         self.remote.fetch(fetch_info["ref"])
         self.repo.git.checkout("FETCH_HEAD")
 
+    def run_revparse(self, args):
+        _, patch_set = self.get_change_and_patch_set(args.change, args.patch_set)
+        print(patch_set["__sha"])
+
+    def run_dashboard(self, args):
+        self.run_list_changes()
+
     def run_search(self, args):
-        qs = ["status:open"] + args
+        qs = ["status:open"] + args.query
         changes = self.api_get_changes(qs)
 
         if len(changes) == 0:
@@ -250,13 +257,18 @@ class Ferrit:
 
     def api_get_change(self, change_num):
         path = "changes/{}/?o=ALL_REVISIONS".format(change_num)
-        return self.api_get(path)
+        change = self.api_get(path)
+        self.add_info_to_change(change)
+        return change
 
     def api_get_changes(self, qs):
         qs.append("repo:" + self.repo_name)
         qs = list(set(qs))
         path = "changes/?o=ALL_REVISIONS&q=" + "+".join(qs)
-        return self.api_get(path)
+        changes = self.api_get(path)
+        for change in changes:
+            self.add_info_to_change(change)
+        return changes
 
     def get_ordered_patch_sets(self, change):
         patch_sets = list(change["revisions"].values())
@@ -276,6 +288,11 @@ class Ferrit:
         r = self.api_get("accounts/?o=DETAILS&q=is:active")
         user_map = {d["_account_id"]: self.initials(d["name"]) for d in r}
         return user_map
+
+    def add_info_to_change(self, change):
+        patch_sets = change["revisions"]
+        for sha, patch_set in patch_sets.items():
+            patch_set["__sha"] = sha
 
     def initials(self, s):
         s = s.strip().upper().replace("-", " ")
