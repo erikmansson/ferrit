@@ -107,6 +107,15 @@ class Ferrit:
             self.run_list_changes()
 
     def run_checkout_patch_set(self, change_num, patch_set_num=None):
+        change, patch_set = self.get_change_and_patch_set(change_num, patch_set_num)
+
+        print()
+        self.print_change(change)
+        print()
+
+        self.fetch_and_checkout(patch_set)
+
+    def get_change_and_patch_set(self, change_num, patch_set_num=None):
         change = self.api_get_change(change_num)
 
         if change is None:
@@ -122,11 +131,7 @@ class Ferrit:
             except IndexError:
                 self.crash("Patch set not found")
 
-        print()
-        self.print_change(change)
-        print()
-
-        self.fetch_and_checkout(patch_set)
+        return change, patch_set
 
     def fetch_and_checkout(self, patch_set):
         fetch_info = patch_set["fetch"]["http"]
