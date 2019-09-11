@@ -87,13 +87,11 @@ class Ferrit:
         subparsers.required = True  # not in call due to bug in argparse
 
         checkout_parser = subparsers.add_parser("checkout", aliases=["ch"])
-        checkout_parser.add_argument("change", type=int)
-        checkout_parser.add_argument("patch_set", type=int, default=None, nargs="?")
+        add_change_and_patch_set_arguments(checkout_parser)
         checkout_parser.set_defaults(func=self.run_checkout)
 
         revparse_parser = subparsers.add_parser("rev-parse", aliases=["sha", "id"])
-        revparse_parser.add_argument("change", type=int)
-        revparse_parser.add_argument("patch_set", type=int, default=None, nargs="?")
+        add_change_and_patch_set_arguments(revparse_parser)
         revparse_parser.set_defaults(func=self.run_revparse)
 
         list_parser = subparsers.add_parser("dashboard", aliases=["da", "li"])
@@ -133,18 +131,22 @@ class Ferrit:
 
         return change, patch_set
 
-    def fetch_and_checkout(self, patch_set):
+    def fetch(self, patch_set):
         fetch_info = patch_set["fetch"]["http"]
 
         if urlparse(fetch_info["url"]).path != urlparse(self.remote.url).path:
             self.crash("Fetch url mismatch (wrong repo?)")
+
+        self.remote.fetch(fetch_info["ref"])
+
+    def fetch_and_checkout(self, patch_set):
+        self.fetch(patch_set)
 
         if self.repo.is_dirty():
             a = self.yn_question("Repo is dirty, continue?")
             if not a:
                 self.quit()
 
-        self.remote.fetch(fetch_info["ref"])
         self.repo.git.checkout("FETCH_HEAD")
 
     def run_revparse(self, args):
@@ -320,6 +322,11 @@ class Ferrit:
     def crash(self, msg):
         sys.stderr.write(str(msg) + "\n")
         sys.exit(1)
+
+
+def add_change_and_patch_set_arguments(parser):
+    parser.add_argument("change", type=int)
+    parser.add_argument("patch_set", type=int, default=None, nargs="?")
 
 
 def main():
