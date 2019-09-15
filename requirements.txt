@@ -1,2 +1,2 @@
-gitpython
 requests
+requests-futures

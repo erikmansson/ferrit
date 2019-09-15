@@ -29,24 +29,24 @@ There (currently) is none. Ferrit assumes that...
 
 Ferrit can be accessed both with the `ferrit` and `fe` command.
 
-List changes:
+List relevant changes:
 ```
-fe
+fe dashboard
 ```
 
 Checkout the latest patch set of change 123:
 ```
-fe 123
+fe checkout 123
 ```
 
 Checkout patch set 45 of change 123:
 ```
-fe 123 45
+fe checkout 123/45
 ```
 
 Search for changes containing the words `foo` and `bar`
 ```
-fe foo bar
+fe search foo bar
 ```
 
 ## Contributing

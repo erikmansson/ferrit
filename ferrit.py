@@ -1,9 +1,11 @@
 import os
 import sys
+import re
+from subprocess import run, CalledProcessError, PIPE
 import json
 import argparse
 import requests
-import git
+from requests_futures.sessions import FuturesSession
 import urllib3
 from urllib.parse import urlparse, urljoin
 from pkg_resources import (
@@ -21,6 +23,9 @@ except (DistributionNotFound, RequirementParseError):
     __version__ = None
 
 
+GITARGS = ["git", "-c", "advice.detachedHead=false"]
+
+
 class Ferrit:
     SSL_VERIFY = False
     REMOTE_NAME = "origin"
@@ -31,19 +36,31 @@ class Ferrit:
 
     def setup(self):
         try:
-            self.repo = git.Repo(search_parent_directories=True)
-        except git.exc.InvalidGitRepositoryError:
-            self.crash("Not a git repo")
+            p = run(
+                [*GITARGS, "rev-parse", "--show-toplevel"],
+                stdout=PIPE,
+                check=True,
+            )
+        except CalledProcessError as e:
+            sys.exit(e.returncode)
+
+        repo_dir = p.stdout.decode("utf-8").strip()
+        os.chdir(repo_dir)
 
         try:
-            self.remote = self.repo.remotes[self.REMOTE_NAME]
-        except IndexError:
-            self.crash("Remote {} not found".format(self.REMOTE_NAME))
+            p = run(
+                [*GITARGS, "remote", "get-url", self.REMOTE_NAME],
+                stdout=PIPE,
+                check=True,
+            )
+        except CalledProcessError as e:
+            sys.exit(e.returncode)
 
-        o = urlparse(self.remote.url)
+        self.remote_url = p.stdout.decode("utf-8").strip()
+        o = urlparse(self.remote_url)
 
         if not o.path.startswith("/a/"):
-            self.crash("Unexpected remote url format (not a gerrit remote?)")
+            self.crash("unexpected remote url format (not a gerrit remote?)")
 
         self.repo_name = o.path[len("/a/"):]
 
@@ -66,12 +83,9 @@ class Ferrit:
                 else:
                     break
         else:
-            self.crash("No credentials found")
+            self.crash("no credentials found")
 
         self.api_base_url = urljoin(credentials, "/a/")
-
-        repo_dir = os.path.join(self.repo.common_dir, "..")
-        os.chdir(repo_dir)
 
     def run(self):
         self.setup()
@@ -86,16 +100,22 @@ class Ferrit:
         subparsers = parser.add_subparsers(dest="command")
         subparsers.required = True  # not in call due to bug in argparse
 
-        checkout_parser = subparsers.add_parser("checkout", aliases=["ch"])
-        add_change_and_patch_set_arguments(checkout_parser)
-        checkout_parser.set_defaults(func=self.run_checkout)
+        cmds = [
+            ("fetch", ["fe"], self.run_fetch),
+            ("checkout", ["ch"], self.run_checkout),
+            ("show", ["sh"], self.run_show),
+            ("rev-parse", ["sha", "id"], self.run_revparse),
+        ]
 
-        revparse_parser = subparsers.add_parser("rev-parse", aliases=["sha", "id"])
-        add_change_and_patch_set_arguments(revparse_parser)
-        revparse_parser.set_defaults(func=self.run_revparse)
+        for title, aliases, func in cmds:
+            subparser = subparsers.add_parser(title, aliases=aliases)
+            subparser.add_argument("number", type=ChangeNum)
+            subparser.set_defaults(
+                func=lambda args, func=func: func(*self.run_wrapper(args))
+            )
 
-        list_parser = subparsers.add_parser("dashboard", aliases=["da", "li"])
-        list_parser.set_defaults(func=self.run_dashboard)
+        dashboard_parser = subparsers.add_parser("dashboard", aliases=["da"])
+        dashboard_parser.set_defaults(func=self.run_dashboard)
 
         search_parser = subparsers.add_parser("search", aliases=["se"])
         search_parser.add_argument("query", nargs="+")
@@ -104,20 +124,28 @@ class Ferrit:
         args = parser.parse_args()
         args.func(args)
 
-    def run_checkout(self, args):
-        change, patch_set = self.get_change_and_patch_set(args.change, args.patch_set)
+    def run_wrapper(self, args):
+        num = args.number
+        return self.get_change_and_patch_set(num.change, num.patch_set)
 
-        print()
-        self.print_change(change)
-        print()
+    def run_fetch(self, change, patch_set):
+        self.fetch(patch_set)
 
+    def run_checkout(self, change, patch_set):
         self.fetch_and_checkout(patch_set)
+
+    def run_show(self, change, patch_set):
+        self.fetch(patch_set)
+        run([*GITARGS, "show", "FETCH_HEAD"])
+
+    def run_revparse(self, change, patch_set):
+        print(patch_set["__sha"])
 
     def get_change_and_patch_set(self, change_num, patch_set_num=None):
         change = self.api_get_change(change_num)
 
         if change is None:
-            self.crash("Change not found")
+            self.crash("change not found")
 
         patch_sets = self.get_ordered_patch_sets(change)
 
@@ -127,31 +155,23 @@ class Ferrit:
             try:
                 patch_set = patch_sets[patch_set_num - 1]
             except IndexError:
-                self.crash("Patch set not found")
+                self.crash("patch set not found")
 
         return change, patch_set
 
     def fetch(self, patch_set):
         fetch_info = patch_set["fetch"]["http"]
 
-        if urlparse(fetch_info["url"]).path != urlparse(self.remote.url).path:
-            self.crash("Fetch url mismatch (wrong repo?)")
+        if urlparse(fetch_info["url"]).path != urlparse(self.remote_url).path:
+            self.crash("fetch url mismatch (wrong repo?)")
 
-        self.remote.fetch(fetch_info["ref"])
+        url = fetch_info["url"]
+        ref = fetch_info["ref"]
+        run([*GITARGS, "fetch", url, ref], capture_output=True, check=True)
 
     def fetch_and_checkout(self, patch_set):
         self.fetch(patch_set)
-
-        if self.repo.is_dirty():
-            a = self.yn_question("Repo is dirty, continue?")
-            if not a:
-                self.quit()
-
-        self.repo.git.checkout("FETCH_HEAD")
-
-    def run_revparse(self, args):
-        _, patch_set = self.get_change_and_patch_set(args.change, args.patch_set)
-        print(patch_set["__sha"])
+        run([*GITARGS, "checkout", "FETCH_HEAD"])
 
     def run_dashboard(self, args):
         self.run_list_changes()
@@ -192,21 +212,27 @@ class Ferrit:
             ]),
         ]
 
-        print()
+        paths = [self.api_path_for_changes(base_qs + qs) for _, qs in querys]
+        out = [""]
+        changess = self.api_get_session(paths)
 
-        for label, qs in querys:
-            changes = self.api_get_changes(base_qs + qs)
-
-            print(label + ":")
+        for changes, (label, qs) in zip(changess, querys):
+            out.append(label + ":")
 
             if changes:
-                self.print_changes(changes)
+                for change in changes:
+                    out.append(self.change_str(change))
             else:
-                print("  No changes found")
+                out.append("  No changes found")
 
-            print()
+            out.append("")
+
+        print("\n".join(out))
 
     def print_change(self, change):
+        print(self.change_str(change))
+
+    def change_str(self, change):
         num = change["_number"]
         wip = change.get("work_in_progress", False)
         private = change.get("is_private", False)
@@ -237,11 +263,10 @@ class Ferrit:
             s=shown_subject,
         )
 
-        print(s)
+        return s
 
     def print_changes(self, changes):
-        for change in changes:
-            self.print_change(change)
+        print("\n".join([self.change_str(c) for c in changes]))
 
     def api_get(self, path):
         url = urljoin(self.api_base_url, path)
@@ -252,10 +277,39 @@ class Ferrit:
         elif r.status_code == 404:
             return None
         else:
-            self.crash("Bad response: {} ({})".format(r.status_code, r.text))
+            self.crash("bad response: {} ({})".format(r.status_code, r.text))
 
         assert r.text.startswith(self.RES_START)
         return json.loads(r.text[len(self.RES_START):])
+
+    def api_get_session(self, paths):
+        session = FuturesSession()
+
+        futures = []
+        for path in paths:
+            url = urljoin(self.api_base_url, path)
+            future = session.get(url, verify=self.SSL_VERIFY)
+            futures.append(future)
+
+        try:
+            results = [future.result() for future in futures]
+        except requests.exceptions.ConnectionError:
+            self.crash("connection error")
+
+        ret = []
+
+        for r in results:
+            if r.status_code == 200:
+                assert r.text.startswith(self.RES_START)
+                d = json.loads(r.text[len(self.RES_START):])
+            elif r.status_code == 404:
+                d = None
+            else:
+                self.crash("bad response: {} ({})".format(r.status_code, r.text))
+
+            ret.append(d)
+
+        return ret
 
     def api_get_change(self, change_num):
         path = "changes/{}/?o=ALL_REVISIONS".format(change_num)
@@ -263,6 +317,11 @@ class Ferrit:
         if change:
             self.add_info_to_change(change)
         return change
+
+    def api_path_for_changes(self, qs):
+        qs = qs + ["repo:" + self.repo_name]
+        qs = list(set(qs))
+        return "changes/?o=ALL_REVISIONS&q=" + "+".join(qs)
 
     def api_get_changes(self, qs):
         qs.append("repo:" + self.repo_name)
@@ -321,13 +380,19 @@ class Ferrit:
         sys.exit(0)
 
     def crash(self, msg):
-        sys.stderr.write(str(msg) + "\n")
+        sys.stderr.write("error: " + str(msg) + "\n")
         sys.exit(1)
 
 
-def add_change_and_patch_set_arguments(parser):
-    parser.add_argument("change", type=int)
-    parser.add_argument("patch_set", type=int, default=None, nargs="?")
+class ChangeNum:
+    def __init__(self, s):
+        pattern = r"(\d+)(?:\/(\d+))?"
+        match = re.fullmatch(pattern, s.strip())
+        if not match:
+            raise ValueError
+        groups = match.groups()
+        self.change = int(groups[0])
+        self.patch_set = None if groups[1] is None else int(groups[1])
 
 
 def main():
