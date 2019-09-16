@@ -167,7 +167,7 @@ class Ferrit:
 
         url = fetch_info["url"]
         ref = fetch_info["ref"]
-        run([*GITARGS, "fetch", url, ref], capture_output=True, check=True)
+        run([*GITARGS, "fetch", url, ref], stdout=PIPE, check=True)
 
     def fetch_and_checkout(self, patch_set):
         self.fetch(patch_set)
