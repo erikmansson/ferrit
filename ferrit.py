@@ -1,9 +1,10 @@
 import os
 import sys
 import re
-from subprocess import run, CalledProcessError, PIPE
+from subprocess import run, CalledProcessError, PIPE, DEVNULL
 import json
 import argparse
+from functools import partial
 import requests
 from requests_futures.sessions import FuturesSession
 import urllib3
@@ -101,18 +102,17 @@ class Ferrit:
         subparsers.required = True  # not in call due to bug in argparse
 
         cmds = [
-            ("fetch", ["fe"], self.run_fetch),
-            ("checkout", ["ch"], self.run_checkout),
-            ("show", ["sh"], self.run_show),
-            ("rev-parse", ["sha", "id"], self.run_revparse),
+            ("fetch", ["fe"]),
+            ("checkout", ["ch"]),
+            ("cherry-pick", ["cp"]),
+            ("show", ["sh"]),
+            ("rev-parse", ["sha", "id"]),
         ]
 
-        for title, aliases, func in cmds:
-            subparser = subparsers.add_parser(title, aliases=aliases)
+        for name, aliases in cmds:
+            subparser = subparsers.add_parser(name, aliases=aliases)
             subparser.add_argument("number", type=ChangeNum)
-            subparser.set_defaults(
-                func=lambda args, func=func: func(*self.run_wrapper(args))
-            )
+            subparser.set_defaults(func=partial(self.fetch_and_cmd, name))
 
         dashboard_parser = subparsers.add_parser("dashboard", aliases=["da"])
         dashboard_parser.set_defaults(func=self.run_dashboard)
@@ -124,22 +124,19 @@ class Ferrit:
         args = parser.parse_args()
         args.func(args)
 
-    def run_wrapper(self, args):
+    def fetch_and_cmd(self, cmd_name, args):
         num = args.number
-        return self.get_change_and_patch_set(num.change, num.patch_set)
+        _, patch_set = self.get_change_and_patch_set(num.change, num.patch_set)
 
-    def run_fetch(self, change, patch_set):
+        if cmd_name == "rev-parse":
+            print(patch_set["__sha"])
+            return
+
         self.fetch(patch_set)
 
-    def run_checkout(self, change, patch_set):
-        self.fetch_and_checkout(patch_set)
-
-    def run_show(self, change, patch_set):
-        self.fetch(patch_set)
-        run([*GITARGS, "show", "FETCH_HEAD"])
-
-    def run_revparse(self, change, patch_set):
-        print(patch_set["__sha"])
+        if cmd_name != "fetch":
+            print()
+            run([*GITARGS, cmd_name, "FETCH_HEAD"])
 
     def get_change_and_patch_set(self, change_num, patch_set_num=None):
         change = self.api_get_change(change_num)
@@ -161,13 +158,34 @@ class Ferrit:
 
     def fetch(self, patch_set):
         fetch_info = patch_set["fetch"]["http"]
-
-        if urlparse(fetch_info["url"]).path != urlparse(self.remote_url).path:
-            self.crash("fetch url mismatch (wrong repo?)")
-
         url = fetch_info["url"]
         ref = fetch_info["ref"]
-        run([*GITARGS, "fetch", url, ref], stdout=PIPE, check=True)
+
+        if urlparse(url).path != urlparse(self.remote_url).path:
+            self.crash("fetch url mismatch (wrong repo?)")
+
+        sha = patch_set["__sha"]
+
+        try:
+            p = run(
+                [*GITARGS, "cat-file", "-t", sha],
+                stdout=PIPE,
+                stderr=DEVNULL,
+                check=True,
+            )
+
+            assert p.stdout.decode("utf-8").strip() == "commit"
+        except (CalledProcessError, AssertionError):
+            pass
+        else:
+            run([*GITARGS, "update-ref", "FETCH_HEAD", sha], check=True)
+            print("ferrit: already fetched, manually setting FETCH_HEAD")
+            return
+
+        try:
+            run([*GITARGS, "fetch", url, ref], stdout=PIPE, check=True)
+        except CalledProcessError:
+            sys.exit(1)
 
     def fetch_and_checkout(self, patch_set):
         self.fetch(patch_set)
