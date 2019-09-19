@@ -44,7 +44,7 @@ Checkout patch set 45 of change 123:
 fe checkout 123/45
 ```
 
-In the same way as `checkout`, ferrit also supports `fetch`, `cherry-pick`, `show` and `rev-parse` (printing the commit hash).
+In the same way as `checkout`, Ferrit also supports `fetch`, `cherry-pick`, `show` and `rev-parse` (printing the commit hash).
 
 Search for changes containing the words `foo` and `bar`
 ```
