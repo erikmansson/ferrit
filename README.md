@@ -10,7 +10,7 @@ A stupid tool for listing and checking out Gerrit changes
 
 Install with pip
 ```
-pip3 install --user ferrit
+pip3 install --user --upgrade ferrit
 ```
 or from the repo
 ```
