@@ -1,19 +1,16 @@
-import os
-import sys
-import re
-from subprocess import run, CalledProcessError, PIPE, DEVNULL
-import json
 import argparse
+import json
+import os
+import re
+import sys
 from functools import partial
-import requests
-from requests_futures.sessions import FuturesSession
-import urllib3
+from subprocess import DEVNULL, PIPE, CalledProcessError, run
 from urllib.parse import quote, urljoin, urlparse
-from pkg_resources import (
-    get_distribution,
-    DistributionNotFound,
-    RequirementParseError,
-)
+
+import requests
+import urllib3
+from pkg_resources import DistributionNotFound, RequirementParseError, get_distribution
+from requests_futures.sessions import FuturesSession
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -22,7 +19,6 @@ try:
     __version__ = get_distribution(__name__).version
 except (DistributionNotFound, RequirementParseError):
     __version__ = None
-
 
 GITARGS = ["git", "-c", "advice.detachedHead=false"]
 

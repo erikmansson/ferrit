@@ -20,7 +20,7 @@ setuptools.setup(
         "console_scripts": [
             "fe=ferrit:main",
             "ferrit=ferrit:main",
-        ]
+        ],
     },
     zip_safe=True,
     use_scm_version=True,
