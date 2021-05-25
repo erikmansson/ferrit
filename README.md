@@ -22,8 +22,6 @@ python3 setup.py install --user
 There (currently) is none. Ferrit assumes that...
 - You're using HTTP to talk to Gerrit
 - The remote you want to use is `origin`
-- Your HTTP credentials are stored in ~/.git-credentials
-- You feel no desire to verify SSL certificates
 
 ### Usage
 

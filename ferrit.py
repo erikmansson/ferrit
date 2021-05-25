@@ -8,7 +8,7 @@ from functools import partial
 import requests
 from requests_futures.sessions import FuturesSession
 import urllib3
-from urllib.parse import urlparse, urljoin
+from urllib.parse import quote, urljoin, urlparse
 from pkg_resources import (
     get_distribution,
     DistributionNotFound,
@@ -28,7 +28,7 @@ GITARGS = ["git", "-c", "advice.detachedHead=false"]
 
 
 class Ferrit:
-    SSL_VERIFY = False
+    SSL_VERIFY = True
     REMOTE_NAME = "origin"
     RES_START = ")]}'\n"
 
@@ -65,28 +65,32 @@ class Ferrit:
 
         self.repo_name = o.path[len("/a/"):]
 
+        req = {
+            "protocol": "https",
+            "path": o.path,
+        }
+
         try:
-            gerrit_user, gerrit_addr = o.netloc.split("@")
+            req["user"], req["host"] = o.netloc.split("@")
         except ValueError:
-            gerrit_user = None
-            gerrit_addr = o.netloc
+            req["host"] = o.netloc
 
-        with open(os.path.expanduser("~/.git-credentials"), "r") as f:
-            credentialss = [line.strip() for line in f.readlines()]
+        try:
+            p = run(
+                [*GITARGS, "credential", "fill"],
+                input="\n".join(f"{k}={v}" for k, v in req.items()).encode(),
+                stdout=PIPE,
+                check=True,
+            )
+        except CalledProcessError as e:
+            sys.exit(e.returncode)
 
-        for credentials in credentialss:
-            o = urlparse(credentials)
-            c_userpass, c_addr = o.netloc.split("@")
-            c_user = c_userpass.split(":")[0]
-            if c_addr == gerrit_addr:
-                if gerrit_user is not None and c_user != gerrit_user:
-                    continue
-                else:
-                    break
-        else:
-            self.crash("no credentials found")
+        res = dict(e.split("=", 1) for e in p.stdout.decode().splitlines())
 
-        self.api_base_url = urljoin(credentials, "/a/")
+        username = res["username"]
+        password = quote(res["password"], safe="")
+        host = res["host"]
+        self.api_base_url = f'https://{username}:{password}@{host}/a/'
 
     def run(self):
         self.setup()
