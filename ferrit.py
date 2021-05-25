@@ -9,7 +9,7 @@ from urllib.parse import quote, urljoin, urlparse
 
 import requests
 import urllib3
-from pkg_resources import DistributionNotFound, RequirementParseError, get_distribution
+from pkg_resources import get_distribution
 from requests_futures.sessions import FuturesSession
 
 
@@ -17,7 +17,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 try:
     __version__ = get_distribution(__name__).version
-except (DistributionNotFound, RequirementParseError):
+except Exception:
     __version__ = None
 
 GITARGS = ["git", "-c", "advice.detachedHead=false"]
