@@ -8,13 +8,13 @@ A stupid tool for listing and checking out Gerrit changes
 
 ### Installation
 
-Install with pip
+Install from PyPI
 ```
-pip3 install --user --upgrade ferrit
+pip install --user --upgrade ferrit
 ```
 or from the repo
 ```
-python3 setup.py install --user
+pip install .
 ```
 
 ### Configuration
