@@ -225,13 +225,17 @@ class Ferrit:
     def run_list_changes(self):
         base_qs = ["status:open", "-is:ignored"]
         querys = [
-            ("Private", ["owner:self", "is:private"]),
-            ("WIP", ["owner:self", "is:wip", "-is:private"]),
-            ("Open", ["owner:self", "-is:wip", "-is:private"]),
-            ("Others", [
+            ("Your Turn", ["attention:self"]),
+            ("Work in progress", ["is:open", "owner:self", "is:wip"]),
+            ("Outgoing reviews", ["is:open", "owner:self", "-is:wip", "-is:ignored"]),
+            ("Incoming reviews", [
+                "is:open",
                 "-owner:self",
-                "(reviewer:self+OR+assignee:self+OR+cc:self)"
+                "-is:wip",
+                "-is:ignored",
+                "(reviewer:self+OR+assignee:self)",
             ]),
+            ("CCed on", ["is:open", "-is:ignored", "cc:self"]),
         ]
 
         paths = [self.api_path_for_changes(base_qs + qs) for _, qs in querys]
@@ -245,7 +249,7 @@ class Ferrit:
                 for change in changes:
                     out.append(self.change_str(change))
             else:
-                out.append("  No changes found")
+                out.append("  No changes")
 
             out.append("")
 
